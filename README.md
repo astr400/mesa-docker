@@ -113,7 +113,7 @@ The tutorial job is `workflow_dispatch` only and pulls a published GHCR image. I
 1. Add an [SSH key to your GitHub account](https://github.com/settings/keys).
 2. Open **Actions → Interactive MESA session → Run workflow**.
 3. Leave **Download and compile MESA** checked unless you only need a bare runner.
-4. Wait for **Setup tmate session**, then copy the `ssh` command (or the web URL) from the log.
+4. Wait for **Start tmate session**. Within about 20 seconds the log should print `SSH:`. If tmate.io is unreachable, the job falls back to **Start upterm session** and prints an `ssh session:…@uptermd.upterm.dev` command instead.
 5. Work in `~/work`. When MESA is installed, `$MESA_DIR` and `$MESASDK_ROOT` are already set.
 6. Type `exit` to end the session. The job also stops at the timeout you selected (max 6 hours).
 
@@ -127,3 +127,4 @@ Only the user who started the workflow can connect (`limit-access-to-actor`). On
 - `scripts/install-mesa.sh` — unpack `.tmp` archives and `./install` as `mesa`
 - `scripts/validate-tutorial.sh` — official `star/work` tutorial
 - `scripts/fetch-archives.sh` — optional Zenodo download into `.tmp`
+- `scripts/start-tmate.sh` — tmate session with a 20s ready timeout

@@ -45,7 +45,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             binutils make perl tcsh unzip wget \
             libx11-6 libx11-dev zlib1g zlib1g-dev \
-            python3 python-is-python3 libc6-dev
+            python3 python-is-python3 libc6-dev tmate
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
 
@@ -101,10 +101,10 @@ jobs:
           ============================================================
           Interactive MESA session
           ------------------------------------------------------------
-          1. Wait for the "Setup tmate session" step.
-          2. Copy the SSH command or web URL from that step's log.
+          1. Wait for **Start tmate session** (or **Start upterm session** if tmate.io is unreachable).
+          2. Copy the SSH command from that step's log (`SSH:` or upterm `ssh session:...`).
           3. Connect. Only your GitHub account's SSH keys are allowed.
-          4. Type "exit" (or close tmate) when finished; the job ends.
+          4. Type "exit" when finished; the job ends.
 
           If MESA was compiled:
             echo $MESA_DIR $MESASDK_ROOT
@@ -116,8 +116,16 @@ jobs:
           ============================================================
           EOF
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+      - name: Start tmate session
+        id: tmate
+        continue-on-error: true
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          TMATE_READY_TIMEOUT: "20"
+        run: ./scripts/start-tmate.sh
+
+      - name: Start upterm session
+        if: steps.tmate.outcome != 'success'
+        uses: owenthereal/action-upterm@v1
         with:
           limit-access-to-actor: true
-          connect-timeout-seconds: 1800
