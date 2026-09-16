@@ -102,17 +102,21 @@ jobs:
           Interactive MESA session
           ------------------------------------------------------------
           1. Wait for **Start tmate session** (or **Start upterm session** if tmate.io is unreachable).
-          2. Copy the SSH command from that step's log (`SSH:` or upterm `ssh session:...`).
+          2. Copy the SSH command from that step's log (`SSH:` or upterm `ssh ...@uptermd.upterm.dev`).
           3. Connect. Only your GitHub account's SSH keys are allowed.
-          4. Type "exit" when finished; the job ends.
+
+          Stay connected. Closing SSH ends the upterm session and this job.
+          To detach without killing the job: run tmux, then Ctrl-b d, then
+          reconnect with the same command while the job is yellow.
+          Type "exit" only when you want the job to finish.
 
           If MESA was compiled:
             echo $MESA_DIR $MESASDK_ROOT
-            cp -r $MESA_DIR/star/work ~/work/tutorial
-            cd ~/work/tutorial && ./mk && ./rn
+            PGSTAR=0 ./scripts/validate-tutorial.sh
+            # or: cp -r $MESA_DIR/star/work ~/work/tutorial && cd ~/work/tutorial && ./mk && ./rn
 
-          GitHub-hosted jobs stop after the chosen timeout (max 6 hours).
-          Add an SSH key at https://github.com/settings/keys if connect fails.
+          No pgstar GUI on the hosted runner. Jobs stop after the chosen timeout
+          (max 6 hours). Add an SSH key at https://github.com/settings/keys if connect fails.
           ============================================================
           EOF
 

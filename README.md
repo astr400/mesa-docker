@@ -1,12 +1,17 @@
 # MESA remote development container
 
-x86_64 Docker environment for [MESA](https://docs.mesastar.org/) stellar evolution, with OpenSSH for Cursor / VS Code Remote-SSH and a noVNC fallback for pgstar.
+Linux x86_64 environment for [MESA](https://docs.mesastar.org/) stellar evolution. Two tested paths:
+
+1. **Local Docker** on Intel/AMD Linux: OpenSSH for Cursor / VS Code Remote-SSH, plus noVNC for pgstar.
+2. **GitHub interactive session**: compile MESA on a hosted `ubuntu-latest` runner and SSH in with tmate (or upterm). Use this when you do not have a Linux x86_64 Docker host.
 
 Pinned versions:
 
 - MESA **26.4.1** (`mesa-26.04.1.zip`)
 - MESA SDK **26.6.1** (`mesasdk-x86_64-linux-26.6.1.tar.gz`)
 - Ubuntu 24.04
+
+Local Docker is **linux/amd64 only**. There is no macOS image and no Darwin MESA SDK in this repo.
 
 ## What you get
 
@@ -16,18 +21,23 @@ Pinned versions:
 | 5901 | VNC | Native VNC client to the pgstar framebuffer |
 | 6080 | noVNC | Browser UI at `http://host:6080` |
 
-Work directories live in the `mesa-work` volume at `/home/mesa/work`. MESA itself is compiled into the image at `/opt/mesa`.
+Those ports are the local Docker image. Work directories live in the `mesa-work` volume at `/home/mesa/work`. MESA itself is compiled into the image at `/opt/mesa`.
 
 SSH is key-only. There is no default password.
 
 ## Prerequisites
 
+Local Docker:
+
+- Linux on Intel/AMD (`x86_64`)
 - Docker with Compose v2 and BuildKit
 - ~20 GB free disk for the image, 8 GB+ RAM recommended
 - An SSH public key
 - Archives in [`.tmp/`](.tmp/README.md) (already present on this machine)
 
 Do not compile MESA as root. The image builds it as user `mesa` (uid 1000).
+
+Without a Linux x86_64 Docker host, skip the local build and use the [interactive session](#interactive-session-on-github-hosted-runners) instead.
 
 ## Place or fetch archives
 
@@ -108,16 +118,33 @@ The tutorial job is `workflow_dispatch` only and pulls a published GHCR image. I
 
 ### Interactive session on GitHub-hosted runners
 
-[`.github/workflows/interactive.yml`](.github/workflows/interactive.yml) is a **Run workflow** action. It compiles MESA on the runner (optional) and then opens a [tmate](https://github.com/mxschmitt/action-tmate) SSH/web shell so you can develop on GitHub's servers.
+[`.github/workflows/interactive.yml`](.github/workflows/interactive.yml) is the remote MESA workflow: it compiles MESA **on the GitHub-hosted runner** (not in Docker) and opens an SSH shell. Anyone with a GitHub account and an SSH key can use it; you do not need local Docker.
 
-1. Add an [SSH key to your GitHub account](https://github.com/settings/keys).
+1. Add an [SSH key to your GitHub account](https://github.com/settings/keys). The key must be on the account that clicks **Run workflow**.
 2. Open **Actions → Interactive MESA session → Run workflow**.
-3. Leave **Download and compile MESA** checked unless you only need a bare runner.
-4. Wait for **Start tmate session**. Within about 20 seconds the log should print `SSH:`. If tmate.io is unreachable, the job falls back to **Start upterm session** and prints an `ssh session:…@uptermd.upterm.dev` command instead.
-5. Work in `~/work`. When MESA is installed, `$MESA_DIR` and `$MESASDK_ROOT` are already set.
-6. Type `exit` to end the session. The job also stops at the timeout you selected (max 6 hours).
+3. Leave **Download and compile MESA** checked unless you only need a bare runner. Pick a timeout (max 6 hours).
+4. Wait until MESA finishes compiling (several minutes), then watch **Start tmate session**.
+5. Within about 20 seconds that step should print `SSH:`. Copy the command and connect from a machine that has the matching private key.
+6. If tmate.io never becomes ready, the job continues to **Start upterm session** and prints something like `ssh <id>@uptermd.upterm.dev`. Use that command instead.
 
-Only the user who started the workflow can connect (`limit-access-to-actor`). One session per user; starting another cancels the previous one. pgstar windows are not forwarded on the hosted runner—use file output or the local Docker GUI.
+MESA lives at `$HOME/mesa` (`$MESA_DIR`). The SDK is `$HOME/mesasdk`. Work in `~/work`. This is not the Docker image, so there is no noVNC/pgstar GUI on the runner. Use `PGSTAR=0` (file output only).
+
+Run the official `star/work` tutorial from the checked-out repo:
+
+```bash
+PGSTAR=0 ./scripts/validate-tutorial.sh
+```
+
+Or by hand:
+
+```bash
+cp -r "$MESA_DIR/star/work" ~/work/tutorial
+cd ~/work/tutorial && ./mk && ./rn
+```
+
+**Stay connected.** Closing the SSH client ends an upterm session and the GitHub job. If you need to walk away, run `tmux` first (install with `sudo apt-get install -y tmux` if needed), then detach with **Ctrl-b** then **d**. Reconnect with the same SSH command while the job is still yellow. Type `exit` only when you want the job to finish.
+
+Only the user who started the workflow can connect (`limit-access-to-actor`). One session per user; starting another cancels the previous one. The job also stops at the timeout you selected.
 
 ## Layout
 
