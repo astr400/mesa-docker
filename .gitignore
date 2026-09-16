@@ -1,0 +1,8 @@
+.tmp/*
+!.tmp/.gitkeep
+!.tmp/README.md
+
+work/
+authorized_keys
+.env
+*.log

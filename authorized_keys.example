@@ -1,0 +1,2 @@
+# One SSH public key per line. Copy to authorized_keys only if you bind-mount it;
+# the supported path is the AUTHORIZED_KEYS environment variable.

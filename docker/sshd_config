@@ -1,0 +1,17 @@
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin no
+AuthorizedKeysFile .ssh/authorized_keys
+X11Forwarding yes
+X11UseLocalhost yes
+AllowTcpForwarding yes
+AllowAgentForwarding yes
+PermitTTY yes
+ClientAliveInterval 30
+ClientAliveCountMax 8
+UsePAM yes
+PrintMotd no
+SetEnv BASH_ENV=/etc/profile.d/mesa.sh MESA_DIR=/opt/mesa MESASDK_ROOT=/opt/mesasdk HDF5_USE_FILE_LOCKING=FALSE
+Subsystem sftp /usr/lib/openssh/sftp-server

@@ -1,0 +1,74 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      run_tutorial:
+        description: Run the MESA star/work tutorial against a published GHCR image
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  smoke:
+    name: Dockerfile and script smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Shellcheck scripts
+        run: shellcheck scripts/*.sh docker/mesa.sh
+
+      - name: Compose config
+        run: docker compose config
+
+      - name: Build base image without compiling MESA
+        run: docker build --target base -t mesa-docker:base .
+
+  tutorial:
+    name: Tutorial against published image
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.run_tutorial) ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache || true
+          df -h
+
+      - name: Pull published image
+        id: pull
+        continue-on-error: true
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:latest"
+          echo "image=${image}" >>"${GITHUB_OUTPUT}"
+          docker pull "${image}"
+
+      - name: Skip when no image is published
+        if: steps.pull.outcome != 'success'
+        run: |
+          echo "No GHCR image is published yet."
+          echo "Local builds use archives in .tmp; CI will fetch those URLs in a later change."
+          exit 0
+
+      - name: Run tutorial
+        if: steps.pull.outcome == 'success'
+        run: |
+          docker run --rm \
+            --shm-size=8g \
+            -e PGSTAR=0 \
+            "${{ steps.pull.outputs.image }}" \
+            /usr/local/bin/validate-tutorial.sh

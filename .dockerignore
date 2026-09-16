@@ -1,0 +1,12 @@
+.git
+.github
+.cursor
+work
+authorized_keys
+.env
+*.md
+*.log
+
+.tmp/*
+!.tmp/mesa-26.04.1.zip
+!.tmp/mesasdk-x86_64-linux-26.6.1.tar.gz

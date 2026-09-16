@@ -1,0 +1,25 @@
+services:
+  mesa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: mesa
+    image: mesa-docker:26.4.1
+    pull_policy: build
+    hostname: mesa
+    ports:
+      - "2222:22"
+      - "5901:5901"
+      - "6080:6080"
+    environment:
+      AUTHORIZED_KEYS: ${AUTHORIZED_KEYS:-}
+    volumes:
+      - mesa-work:/home/mesa/work
+    shm_size: 8gb
+    ulimits:
+      stack: -1
+    init: false
+    restart: unless-stopped
+
+volumes:
+  mesa-work:
