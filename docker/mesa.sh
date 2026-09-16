@@ -4,6 +4,9 @@
 export MESA_DIR="${MESA_DIR:-/opt/mesa}"
 export MESASDK_ROOT="${MESASDK_ROOT:-/opt/mesasdk}"
 export HDF5_USE_FILE_LOCKING="${HDF5_USE_FILE_LOCKING:-FALSE}"
+# mesasdk_init.sh does MANPATH="${...}:${MANPATH}" and fails under `set -u`
+# when MANPATH is unset (GitHub-hosted runners).
+export MANPATH="${MANPATH:-}"
 
 if [ -z "${OMP_NUM_THREADS:-}" ]; then
   if command -v nproc >/dev/null 2>&1; then

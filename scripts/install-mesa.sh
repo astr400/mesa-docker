@@ -67,8 +67,11 @@ run_install() {
   export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$(nproc)}"
   export NPROCS="${NPROCS:-${OMP_NUM_THREADS}}"
   export HDF5_USE_FILE_LOCKING="${HDF5_USE_FILE_LOCKING:-FALSE}"
+  # mesasdk_init.sh appends to MANPATH and is not nounset-safe.
+  set +u
   # shellcheck disable=SC1091
   source "${MESASDK_ROOT}/bin/mesasdk_init.sh"
+  set -u
   gfortran --version
   cd "${MESA_DIR}"
   ./install
@@ -88,8 +91,11 @@ else
     NPROCS="${nprocs}" \
     HDF5_USE_FILE_LOCKING=FALSE \
     bash -eo pipefail <<'EOS'
+# mesasdk_init.sh appends to MANPATH and is not nounset-safe.
+set +u
 # shellcheck disable=SC1091
 source "${MESASDK_ROOT}/bin/mesasdk_init.sh"
+set -u
 gfortran --version
 cd "${MESA_DIR}"
 ./install
