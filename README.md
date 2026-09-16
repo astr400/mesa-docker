@@ -104,7 +104,20 @@ docker compose exec -e PGSTAR=1 -u mesa mesa bash -lc /usr/local/bin/validate-tu
 - `docker compose config`
 - `docker build --target base` (SSH/GUI image, no MESA compile)
 
-The tutorial job is `workflow_dispatch` only and pulls a published GHCR image. It does not download the 2 GB MESA zip on every PR. Wire those URL paths when the image is published.
+The tutorial job is `workflow_dispatch` only and pulls a published GHCR image. It does not download the 2 GB MESA zip on every PR.
+
+### Interactive session on GitHub-hosted runners
+
+[`.github/workflows/interactive.yml`](.github/workflows/interactive.yml) is a **Run workflow** action. It compiles MESA on the runner (optional) and then opens a [tmate](https://github.com/mxschmitt/action-tmate) SSH/web shell so you can develop on GitHub's servers.
+
+1. Add an [SSH key to your GitHub account](https://github.com/settings/keys).
+2. Open **Actions → Interactive MESA session → Run workflow**.
+3. Leave **Download and compile MESA** checked unless you only need a bare runner.
+4. Wait for **Setup tmate session**, then copy the `ssh` command (or the web URL) from the log.
+5. Work in `~/work`. When MESA is installed, `$MESA_DIR` and `$MESASDK_ROOT` are already set.
+6. Type `exit` to end the session. The job also stops at the timeout you selected (max 6 hours).
+
+Only the user who started the workflow can connect (`limit-access-to-actor`). One session per user; starting another cancels the previous one. pgstar windows are not forwarded on the hosted runner—use file output or the local Docker GUI.
 
 ## Layout
 

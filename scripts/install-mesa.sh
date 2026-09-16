@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Unpack .tmp archives and compile MESA as the non-root mesa user.
+# Unpack MESA archives and compile as a non-root user.
+# Docker image: MESA_DIR=/opt/mesa, ARCHIVE_DIR=/archives, MESA_USER=mesa
+# GitHub runner: MESA_DIR=$HOME/mesa, ARCHIVE_DIR=.tmp, MESA_USER=$USER
 set -euo pipefail
 
 MESA_USER="${MESA_USER:-mesa}"
@@ -23,10 +25,13 @@ if [ ! -f "${sdk_tar}" ]; then
   exit 1
 fi
 
+sdk_parent="$(dirname "${MESASDK_ROOT}")"
+mesa_parent="$(dirname "${MESA_DIR}")"
+mkdir -p "${sdk_parent}" "${mesa_parent}"
+
 echo "unpacking MESA SDK from ${sdk_tar}"
-mkdir -p /opt
-tar -xzf "${sdk_tar}" -C /opt
-sdk_unpacked="$(find /opt -mindepth 1 -maxdepth 1 -type d -name 'mesasdk*' | head -n 1)"
+tar -xzf "${sdk_tar}" -C "${sdk_parent}"
+sdk_unpacked="$(find "${sdk_parent}" -mindepth 1 -maxdepth 1 -type d -name 'mesasdk*' | head -n 1)"
 if [ -z "${sdk_unpacked}" ]; then
   echo "error: SDK tarball did not contain a mesasdk directory" >&2
   exit 1
@@ -37,8 +42,8 @@ if [ "${sdk_unpacked}" != "${MESASDK_ROOT}" ]; then
 fi
 
 echo "unpacking MESA from ${mesa_zip}"
-unzip -q "${mesa_zip}" -d /opt
-mesa_unpacked="$(find /opt -mindepth 1 -maxdepth 1 -type d -name 'mesa-*' | head -n 1)"
+unzip -q "${mesa_zip}" -d "${mesa_parent}"
+mesa_unpacked="$(find "${mesa_parent}" -mindepth 1 -maxdepth 1 -type d -name 'mesa-*' | head -n 1)"
 if [ -z "${mesa_unpacked}" ]; then
   echo "error: MESA zip did not contain a mesa directory" >&2
   exit 1
@@ -48,22 +53,47 @@ if [ "${mesa_unpacked}" != "${MESA_DIR}" ]; then
   mv "${mesa_unpacked}" "${MESA_DIR}"
 fi
 
-chown -R "${MESA_USER}:${MESA_USER}" "${MESA_DIR}" "${MESASDK_ROOT}"
+if [ "${DELETE_ARCHIVES:-false}" = "true" ]; then
+  rm -f "${mesa_zip}" "${sdk_tar}" || true
+fi
+
+if [ "$(id -un)" != "${MESA_USER}" ]; then
+  chown -R "${MESA_USER}:${MESA_USER}" "${MESA_DIR}" "${MESASDK_ROOT}"
+fi
+
+run_install() {
+  export MESA_DIR
+  export MESASDK_ROOT
+  export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$(nproc)}"
+  export NPROCS="${NPROCS:-${OMP_NUM_THREADS}}"
+  export HDF5_USE_FILE_LOCKING="${HDF5_USE_FILE_LOCKING:-FALSE}"
+  # shellcheck disable=SC1091
+  source "${MESASDK_ROOT}/bin/mesasdk_init.sh"
+  gfortran --version
+  cd "${MESA_DIR}"
+  ./install
+}
 
 nprocs="$(nproc)"
 echo "compiling MESA as ${MESA_USER} with NPROCS=${nprocs}"
-runuser -u "${MESA_USER}" -- bash -eo pipefail <<EOF
-export MESA_DIR='${MESA_DIR}'
-export MESASDK_ROOT='${MESASDK_ROOT}'
-export HOME='$(getent passwd "${MESA_USER}" | cut -d: -f6)'
-export OMP_NUM_THREADS='${nprocs}'
-export NPROCS='${nprocs}'
-export HDF5_USE_FILE_LOCKING=FALSE
+if [ "$(id -un)" = "${MESA_USER}" ]; then
+  run_install
+else
+  mesa_home="$(getent passwd "${MESA_USER}" | cut -d: -f6)"
+  runuser -u "${MESA_USER}" -- env \
+    MESA_DIR="${MESA_DIR}" \
+    MESASDK_ROOT="${MESASDK_ROOT}" \
+    HOME="${mesa_home}" \
+    OMP_NUM_THREADS="${nprocs}" \
+    NPROCS="${nprocs}" \
+    HDF5_USE_FILE_LOCKING=FALSE \
+    bash -eo pipefail <<'EOS'
 # shellcheck disable=SC1091
-source "\${MESASDK_ROOT}/bin/mesasdk_init.sh"
+source "${MESASDK_ROOT}/bin/mesasdk_init.sh"
 gfortran --version
-cd "\${MESA_DIR}"
+cd "${MESA_DIR}"
 ./install
-EOF
+EOS
+fi
 
 echo "MESA installation finished"

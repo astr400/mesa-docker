@@ -1,0 +1,122 @@
+name: Interactive MESA session
+
+on:
+  workflow_dispatch:
+    inputs:
+      install_mesa:
+        description: Download and compile MESA on the runner before opening the session
+        type: boolean
+        default: true
+      timeout_minutes:
+        description: Job time limit in minutes (GitHub-hosted max is 360)
+        type: choice
+        options:
+          - "60"
+          - "120"
+          - "240"
+          - "360"
+        default: "360"
+
+concurrency:
+  group: interactive-${{ github.actor }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  session:
+    name: Interactive session
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache /usr/local/share/powershell /usr/share/swift \
+            /usr/local/.ghcup || true
+          df -h
+
+      - name: Install MESA SDK prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils make perl tcsh unzip wget \
+            libx11-6 libx11-dev zlib1g zlib1g-dev \
+            python3 python-is-python3 libc6-dev
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Restore MESA archives cache
+        if: ${{ inputs.install_mesa }}
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .tmp/mesa-26.04.1.zip
+            .tmp/mesasdk-x86_64-linux-26.6.1.tar.gz
+          key: mesa-archives-26.04.1-sdk-26.6.1
+
+      - name: Fetch MESA archives
+        if: ${{ inputs.install_mesa }}
+        run: ./scripts/fetch-archives.sh
+
+      - name: Save MESA archives cache
+        if: ${{ inputs.install_mesa && steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .tmp/mesa-26.04.1.zip
+            .tmp/mesasdk-x86_64-linux-26.6.1.tar.gz
+          key: mesa-archives-26.04.1-sdk-26.6.1
+
+      - name: Compile MESA on the runner
+        if: ${{ inputs.install_mesa }}
+        run: |
+          export MESA_USER="$(id -un)"
+          export MESA_DIR="${HOME}/mesa"
+          export MESASDK_ROOT="${HOME}/mesasdk"
+          export ARCHIVE_DIR="${GITHUB_WORKSPACE}/.tmp"
+          export DELETE_ARCHIVES=true
+          ./scripts/install-mesa.sh
+          {
+            echo "export MESA_DIR=${HOME}/mesa"
+            echo "export MESASDK_ROOT=${HOME}/mesasdk"
+            echo "export HDF5_USE_FILE_LOCKING=FALSE"
+            echo 'export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$(nproc)}"'
+            echo '[ -f "${MESASDK_ROOT}/bin/mesasdk_init.sh" ] && . "${MESASDK_ROOT}/bin/mesasdk_init.sh"'
+          } >>"${HOME}/.bashrc"
+          mkdir -p "${HOME}/work"
+          echo "MESA_DIR=${HOME}/mesa" >>"${GITHUB_ENV}"
+          echo "MESASDK_ROOT=${HOME}/mesasdk" >>"${GITHUB_ENV}"
+          echo "HDF5_USE_FILE_LOCKING=FALSE" >>"${GITHUB_ENV}"
+          df -h
+
+      - name: Session instructions
+        run: |
+          cat <<'EOF'
+          ============================================================
+          Interactive MESA session
+          ------------------------------------------------------------
+          1. Wait for the "Setup tmate session" step.
+          2. Copy the SSH command or web URL from that step's log.
+          3. Connect. Only your GitHub account's SSH keys are allowed.
+          4. Type "exit" (or close tmate) when finished; the job ends.
+
+          If MESA was compiled:
+            echo $MESA_DIR $MESASDK_ROOT
+            cp -r $MESA_DIR/star/work ~/work/tutorial
+            cd ~/work/tutorial && ./mk && ./rn
+
+          GitHub-hosted jobs stop after the chosen timeout (max 6 hours).
+          Add an SSH key at https://github.com/settings/keys if connect fails.
+          ============================================================
+          EOF
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+          connect-timeout-seconds: 1800
