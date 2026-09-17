@@ -13,13 +13,14 @@ services:
       - "6080:6080"
     environment:
       AUTHORIZED_KEYS: ${AUTHORIZED_KEYS:-}
+    # Host bind mounts (preferred): edit inlists on the host, keep LOGS/ and
+    # archived runs after the container is removed. A named volume at
+    # /home/mesa/work is possible but hides files from the host IDE.
     volumes:
-      - mesa-work:/home/mesa/work
+      - ./work:/home/mesa/work
+      - ./results:/home/mesa/results
     shm_size: 8gb
     ulimits:
       stack: -1
     init: false
     restart: unless-stopped
-
-volumes:
-  mesa-work:

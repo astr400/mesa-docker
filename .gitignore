@@ -2,7 +2,10 @@
 !.tmp/.gitkeep
 !.tmp/README.md
 
-work/
+# MESA data products (see work/.gitignore for generated files under projects)
+results/*
+!results/.gitkeep
+
 authorized_keys
 .env
 *.log

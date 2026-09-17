@@ -26,7 +26,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Shellcheck scripts
-        run: shellcheck scripts/*.sh docker/mesa.sh
+        run: shellcheck scripts/*.sh scripts/mesa docker/mesa.sh
 
       - name: Compose config
         run: docker compose config

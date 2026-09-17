@@ -21,7 +21,7 @@ Local Docker is **linux/amd64 only**. There is no macOS image and no Darwin MESA
 | 5901 | VNC | Native VNC client to the pgstar framebuffer |
 | 6080 | noVNC | Browser UI at `http://host:6080` |
 
-Those ports are the local Docker image. Work directories live in the `mesa-work` volume at `/home/mesa/work`. MESA itself is compiled into the image at `/opt/mesa`.
+Those ports are the local Docker image. Projects live on the host at [`work/`](work/) (mounted at `/home/mesa/work`). Frozen run snapshots go in [`results/`](results/). MESA itself is compiled into the image at `/opt/mesa`. The scientific loop is in [docs/workflow.md](docs/workflow.md).
 
 SSH is key-only. There is no default password.
 
@@ -106,6 +106,16 @@ To watch pgstar in the browser, run the same tutorial with plotting on:
 docker compose exec -e PGSTAR=1 -u mesa mesa bash -lc /usr/local/bin/validate-tutorial.sh
 ```
 
+`validate-tutorial.sh` **deletes and recopies** the work directory each time. Do not use it as a science archive. For a durable project, follow [docs/workflow.md](docs/workflow.md).
+
+## Scientific workflow
+
+Edit inlists on the host under `work/<project>`, run MESA with [`scripts/mesa`](scripts/mesa), and save off `LOGS/` plus portable models with `scripts/mesa archive`. Full steps, bind mounts, photos vs `.mod`, git, and Zenodo: **[docs/workflow.md](docs/workflow.md)**.
+
+If you previously used the named volume `mesa-work`, that data is unused after this compose change until you copy it into `./work`.
+
+GitHub [interactive sessions](#interactive-session-on-github-hosted-runners) have **no durable volume**. `~/work` dies with the job. Use them to compile and debug, not to archive science runs.
+
 ## GitHub Actions
 
 [`.github/workflows/validate.yml`](.github/workflows/validate.yml) runs on pull requests:
@@ -149,7 +159,9 @@ Only the user who started the workflow can connect (`limit-access-to-actor`). On
 ## Layout
 
 - `Dockerfile` — `base` (SSH + VNC) and `mesa` (compiled MESA) stages
-- `docker-compose.yml` — ports 2222 / 5901 / 6080 and the work volume
+- `docker-compose.yml` — ports 2222 / 5901 / 6080; bind-mounts `work/` and `results/`
+- `docs/workflow.md` — scientific loop with this container
+- `scripts/mesa` — run `./mk` / `./rn` / `./re` and `archive` from a host `work/` project
 - `scripts/entrypoint.sh` — sshd, Xvfb, fluxbox, x11vnc, noVNC
 - `scripts/install-mesa.sh` — unpack `.tmp` archives and `./install` as `mesa`
 - `scripts/validate-tutorial.sh` — official `star/work` tutorial

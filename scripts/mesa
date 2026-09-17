@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# Run MESA commands in the compose stack as if they were local.
+# Must be invoked with cwd under <repo>/work except for: seed, -h/--help.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HOST_WORK="${ROOT}/work"
+HOST_RESULTS="${ROOT}/results"
+CONT_WORK="/home/mesa/work"
+CONT_RESULTS="/home/mesa/results"
+COMPOSE=(docker compose --project-directory "${ROOT}" -f "${ROOT}/docker-compose.yml")
+
+usage() {
+  cat <<EOF
+Usage:
+  $(basename "$0")                 Interactive login shell at the mapped cwd
+  $(basename "$0") ./mk
+  $(basename "$0") ./rn
+  $(basename "$0") ./re x207
+  $(basename "$0") seed [name]     Copy \$MESA_DIR/star/work to work/<name>
+  $(basename "$0") archive [dir]   Snapshot this project under results/
+
+Working directory must be under ${HOST_WORK} (except seed and help).
+The mesa service must already be running (docker compose up -d).
+EOF
+}
+
+die() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+abs_dir() {
+  # $1 path; create if requested via $2=create
+  local path="$1"
+  if [ ! -d "${path}" ]; then
+    if [ "${2:-}" = "create" ]; then
+      mkdir -p "${path}"
+    else
+      die "not a directory: ${path}"
+    fi
+  fi
+  (cd "${path}" && pwd -P)
+}
+
+require_running() {
+  if ! "${COMPOSE[@]}" exec -T mesa true >/dev/null 2>&1; then
+    die "mesa service is not running. Start it with: docker compose up -d (from ${ROOT})"
+  fi
+}
+
+compose_exec() {
+  local cont_wd="$1"
+  shift
+  local tty_flag
+  if [ -t 0 ]; then
+    tty_flag="-t"
+  else
+    tty_flag="-T"
+  fi
+  if [ "$#" -eq 0 ]; then
+    exec "${COMPOSE[@]}" exec -u mesa -w "${cont_wd}" "${tty_flag}" mesa bash -l
+  fi
+  local cmd
+  printf -v cmd '%q ' "$@"
+  exec "${COMPOSE[@]}" exec -u mesa -w "${cont_wd}" "${tty_flag}" mesa bash -lc "${cmd}"
+}
+
+# Relative path from host work tree, or empty string if cwd is work itself.
+rel_from_work() {
+  local pwd_abs work_abs
+  pwd_abs="$(pwd -P)"
+  work_abs="$(abs_dir "${HOST_WORK}" create)"
+  case "${pwd_abs}" in
+    "${work_abs}")
+      echo ""
+      ;;
+    "${work_abs}"/*)
+      echo "${pwd_abs#"${work_abs}"/}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+require_work_project() {
+  local rel
+  if ! rel="$(rel_from_work)"; then
+    die "working directory must be under ${HOST_WORK} (cwd is $(pwd -P))"
+  fi
+  if [ -z "${rel}" ]; then
+    die "cd into a project under ${HOST_WORK} (for example ${HOST_WORK}/tutorial)"
+  fi
+  echo "${rel}"
+}
+
+seed_project() {
+  local name="${1:-tutorial}"
+  if [[ ! "${name}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    die "invalid project name '${name}' (use letters, digits, ., _, -)"
+  fi
+  mkdir -p "${HOST_WORK}"
+  if [ -e "${HOST_WORK}/${name}" ]; then
+    die "${HOST_WORK}/${name} already exists"
+  fi
+  require_running
+  "${COMPOSE[@]}" exec -u mesa -T mesa bash -lc \
+    "cp -a \"\${MESA_DIR}/star/work\" \"${CONT_WORK}/${name}\""
+  echo "seeded ${HOST_WORK}/${name}"
+}
+
+archive_project() {
+  local rel dest dest_abs results_abs stamp host_project cont_dest image
+  rel="$(require_work_project)"
+  host_project="$(pwd -P)"
+  if [ ! -s "${host_project}/LOGS/history.data" ]; then
+    die "LOGS/history.data is missing or empty; run ./rn before archive"
+  fi
+
+  mkdir -p "${HOST_RESULTS}"
+  results_abs="$(abs_dir "${HOST_RESULTS}")"
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+
+  if [ -n "${1:-}" ]; then
+    mkdir -p "$1"
+    dest_abs="$(abs_dir "$1")"
+    case "${dest_abs}" in
+      "${results_abs}" | "${results_abs}"/*) ;;
+      *)
+        die "archive destination must be under ${HOST_RESULTS}"
+        ;;
+    esac
+  else
+    dest="${HOST_RESULTS}/${rel}/${stamp}"
+    mkdir -p "${dest}"
+    dest_abs="$(abs_dir "${dest}")"
+  fi
+
+  require_running
+
+  shopt -s nullglob
+  local item
+  for item in inlist inlist_* ./*.list mk rn re clean makefile Makefile make \
+    src LOGS png pgstar_out ./*.mod; do
+    if [ -e "${item}" ]; then
+      cp -a "${item}" "${dest_abs}/"
+    fi
+  done
+  shopt -u nullglob
+
+  echo "note: photos/ are restart-only for this MESA version; not copied to the archive" >&2
+
+  image="$(docker inspect --format '{{.Config.Image}}' "$("${COMPOSE[@]}" ps -q mesa)")"
+  cont_dest="${CONT_RESULTS}/${dest_abs#"${results_abs}"/}"
+  if [ "${dest_abs}" = "${results_abs}" ]; then
+    die "refusing to write provenance at the results root; pick a snapshot directory"
+  fi
+
+  "${COMPOSE[@]}" exec -u mesa -T \
+    -e ARCHIVE_UTC="${stamp}" \
+    -e HOST_PROJECT="${host_project}" \
+    -e IMAGE_NAME="${image}" \
+    mesa bash -lc "umask 022; {
+      echo \"utc=\${ARCHIVE_UTC}\"
+      echo \"host_project=\${HOST_PROJECT}\"
+      echo \"image=\${IMAGE_NAME}\"
+      echo \"MESA_DIR=\${MESA_DIR}\"
+      echo \"MESASDK_ROOT=\${MESASDK_ROOT}\"
+      echo \"OMP_NUM_THREADS=\${OMP_NUM_THREADS}\"
+      if [ -f \"\${MESA_DIR}/data/version_number\" ]; then
+        echo \"mesa_version=\$(tr -d '[:space:]' < \"\${MESA_DIR}/data/version_number\")\"
+      fi
+      if [ -f \"\${MESASDK_ROOT}/bin/mesasdk_version\" ]; then
+        echo \"mesasdk_version=\$(tr -d '[:space:]' < \"\${MESASDK_ROOT}/bin/mesasdk_version\")\"
+      fi
+    } > \"${cont_dest}/provenance.txt\""
+
+  echo "archived ${host_project} -> ${dest_abs}"
+}
+
+mkdir -p "${HOST_WORK}" "${HOST_RESULTS}"
+
+case "${1:-}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  seed)
+    shift
+    seed_project "${1:-tutorial}"
+    ;;
+  archive)
+    shift
+    archive_project "${1:-}"
+    ;;
+  "")
+    rel="$(require_work_project)"
+    require_running
+    compose_exec "${CONT_WORK}/${rel}"
+    ;;
+  *)
+    rel="$(require_work_project)"
+    require_running
+    compose_exec "${CONT_WORK}/${rel}" "$@"
+    ;;
+esac
